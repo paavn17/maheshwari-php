@@ -106,6 +106,47 @@ if ($selectedInstitution) {
     }
 }
 
+// Function to process profile picture
+function processProfilePicture($profilePicData) {
+    if (empty($profilePicData)) {
+        return null;
+    }
+
+    // If it's already a data URL, return it
+    if (strpos($profilePicData, 'data:') === 0) {
+        return $profilePicData;
+    }
+
+    // If it's a file path, try to read the file
+    if (strlen($profilePicData) < 500 && (strpos($profilePicData, '/') !== false || strpos($profilePicData, '\\') !== false)) {
+        // It looks like a file path
+        if (file_exists($profilePicData)) {
+            $imageData = file_get_contents($profilePicData);
+            if ($imageData !== false) {
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mimeType = $finfo->buffer($imageData);
+                if (strpos($mimeType, 'image/') === 0) {
+                    return "data:$mimeType;base64," . base64_encode($imageData);
+                }
+            }
+        }
+        return null;
+    }
+
+    // If it's binary data, process it
+    if (strlen($profilePicData) > 100) {
+        // Try to detect if it's valid image data
+        $finfo = new finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->buffer($profilePicData);
+        
+        if (strpos($mimeType, 'image/') === 0) {
+            return "data:$mimeType;base64," . base64_encode($profilePicData);
+        }
+    }
+
+    return null;
+}
+
 // Fetch students according to filters
 $students = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $selectedInstitution && $selectedBatch) {
@@ -132,21 +173,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $selectedInstitution && $selectedBa
     $result = $stmt->get_result();
 
     while ($row = $result->fetch_assoc()) {
-        if (!empty($row['profile_pic'])) {
-            if (strlen($row['profile_pic']) > 20) {
-                $finfo = new finfo(FILEINFO_MIME_TYPE);
-                $mimeType = $finfo->buffer($row['profile_pic']);
-                if (strpos($mimeType, 'image/') === 0) {
-                    $row['profile_pic'] = "data:$mimeType;base64," . base64_encode($row['profile_pic']);
-                } else {
-                    $row['profile_pic'] = null;
-                }
-            } else {
-                $row['profile_pic'] = null;
-            }
-        } else {
-            $row['profile_pic'] = null;
-        }
+        // Process profile picture
+        $row['profile_pic'] = processProfilePicture($row['profile_pic']);
         $students[] = $row;
     }
 }
@@ -222,22 +250,24 @@ button {
 button:hover {
     background-color: #a43f0a;
 }
+.table-container {
+    max-width: 900px;
+    margin: 0 auto;
+    overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(234,88,12,0.2);
+}
 table {
     border-collapse: collapse;
     width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    table-layout: fixed;
-    overflow-x: auto;
-    display: block;
-    white-space: nowrap;
+    min-width: 1200px;
 }
 th, td {
     border: 1px solid #ccc;
     padding: 12px 16px;
     vertical-align: middle;
     word-wrap: break-word;
-    min-width: 140px;
+    text-align: left;
 }
 th {
     background:#f97316;
@@ -249,11 +279,26 @@ th {
     z-index: 5;
 }
 .student-pic {
-    width: 40px;
-    height: 40px;
+    width: 50px;
+    height: 50px;
     border-radius: 50%;
     object-fit: cover;
-    border: 1px solid #ddd;
+    border: 2px solid #f97316;
+    display: block;
+    margin: 0 auto;
+}
+.no-image {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: #f3f4f6;
+    border: 2px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 12px;
+    margin: 0 auto;
 }
 .message {
     max-width: 900px;
@@ -262,14 +307,88 @@ th {
     color: #c2410c;
     text-align: center;
 }
+.photo-col {
+    width: 80px;
+    text-align: center;
+}
+.name-col {
+    min-width: 150px;
+}
+.roll-col {
+    width: 100px;
+}
+.class-col {
+    width: 80px;
+}
+.section-col {
+    width: 80px;
+}
+.year-col {
+    width: 100px;
+}
+.mobile-col {
+    width: 120px;
+}
+.email-col {
+    min-width: 200px;
+}
+.gender-col {
+    width: 80px;
+}
+.dob-col {
+    width: 120px;
+}
+.blood-col {
+    width: 100px;
+}
+.adhaar-col {
+    width: 150px;
+}
+.address-col {
+    min-width: 200px;
+}
+
+/* Image loading error handling */
+.student-pic[src=""], .student-pic:not([src]) {
+    display: none;
+}
+
 @media (max-width: 768px) {
     aside.sidebar { display: none; }
     main.content { margin-left: 0; padding: 1rem; }
     form { flex-direction: column; align-items: stretch; }
     select, input[type=text], button { flex: none; width: 100%; }
-    table { display: block; white-space: nowrap; overflow-x: auto; }
+    .table-container { margin: 0 -1rem; }
+    table { min-width: 800px; }
+    th, td { padding: 8px; font-size: 14px; }
+    .student-pic, .no-image { width: 40px; height: 40px; }
 }
 </style>
+<script>
+// Handle image loading errors
+function handleImageError(img) {
+    img.style.display = 'none';
+    var noImageDiv = img.nextElementSibling;
+    if (noImageDiv && noImageDiv.classList.contains('no-image')) {
+        noImageDiv.style.display = 'flex';
+    } else {
+        var newNoImageDiv = document.createElement('div');
+        newNoImageDiv.className = 'no-image';
+        newNoImageDiv.innerHTML = 'No Image';
+        newNoImageDiv.style.display = 'flex';
+        img.parentNode.appendChild(newNoImageDiv);
+    }
+}
+
+// Show loading placeholder while image loads
+function handleImageLoad(img) {
+    img.style.display = 'block';
+    var noImageDiv = img.nextElementSibling;
+    if (noImageDiv && noImageDiv.classList.contains('no-image')) {
+        noImageDiv.style.display = 'none';
+    }
+}
+</script>
 </head>
 <body>
 <aside class="sidebar">
@@ -299,74 +418,86 @@ th {
                         </option>
                     <?php endforeach; ?>
                 </select>
+                
+                <?php if ($selectedBatch): ?>
+                    <input type="text" name="class" value="<?= htmlspecialchars($searchClass) ?>" placeholder="Search by Class (optional)" />
+                    <button type="submit">Filter Results</button>
+                <?php endif; ?>
             <?php endif; ?>
         <?php else: ?>
             <select name="batch" disabled>
                 <option>-- Select Batch --</option>
             </select>
+            <input type="text" disabled placeholder="Search by Class (optional)" />
+            <button type="submit" disabled>Filter Results</button>
         <?php endif; ?>
 
         <?php if ($selectedInstitution && $selectedBatch && !empty($batches)): ?>
             <button type="submit" name="download_csv" value="1">Download CSV</button>
         <?php else: ?>
-            <input type="text" disabled placeholder="Search by Class (optional)" />
-            <button type="submit" disabled>Go</button>
             <button type="submit" disabled>Download CSV</button>
         <?php endif; ?>
     </form>
 
-    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && $selectedInstitution && $selectedBatch): ?>
+    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && $selectedInstitution && $selectedBatch && !isset($_POST['download_csv'])): ?>
         <?php if (empty($students)): ?>
             <p class="message">No students found for selected filters.</p>
         <?php else: ?>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Photo</th>
-                        <th>Name</th>
-                        <th>Father Name</th>
-                        <th>Roll No</th>
-                        <th>Class</th>
-                        <th>Section</th>
-                        <th>Start Year</th>
-                        <th>End Year</th>
-                        <th>Mobile</th>
-                        <th>Email</th>
-                        <th>Gender</th>
-                        <th>Date of Birth</th>
-                        <th>Blood Group</th>
-                        <th>Adhaar No</th>
-                        <th>Address</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach($students as $stu): ?>
-                    <tr>
-                        <td>
-                            <?php if ($stu['profile_pic']): ?>
-                                <img src="<?= $stu['profile_pic'] ?>" alt="Photo" class="student-pic" />
-                            <?php else: ?>
-                                <span style="color:#ccc;">-</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($stu['name']) ?></td>
-                        <td><?= htmlspecialchars($stu['father_name']) ?></td>
-                        <td><?= htmlspecialchars($stu['roll_no']) ?></td>
-                        <td><?= htmlspecialchars($stu['class']) ?></td>
-                        <td><?= htmlspecialchars($stu['section']) ?></td>
-                        <td><?= htmlspecialchars($stu['start_year']) ?></td>
-                        <td><?= htmlspecialchars($stu['end_year']) ?></td>
-                        <td><?= htmlspecialchars($stu['mobile']) ?></td>
-                        <td><?= htmlspecialchars($stu['email']) ?></td>
-                        <td><?= htmlspecialchars($stu['gender']) ?></td>
-                        <td><?= htmlspecialchars($stu['dob']) ?></td>
-                        <td><?= htmlspecialchars($stu['blood_group']) ?></td>
-                        <td><?= htmlspecialchars($stu['adhaar_no']) ?></td>
-                        <td><?= nl2br(htmlspecialchars($stu['address'])) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="photo-col">Photo</th>
+                            <th class="name-col">Name</th>
+                            <th class="name-col">Father Name</th>
+                            <th class="roll-col">Roll No</th>
+                            <th class="class-col">Class</th>
+                            <th class="section-col">Section</th>
+                            <th class="year-col">Start Year</th>
+                            <th class="year-col">End Year</th>
+                            <th class="mobile-col">Mobile</th>
+                            <th class="email-col">Email</th>
+                            <th class="gender-col">Gender</th>
+                            <th class="dob-col">Date of Birth</th>
+                            <th class="blood-col">Blood Group</th>
+                            <th class="adhaar-col">Adhaar No</th>
+                            <th class="address-col">Address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach($students as $stu): ?>
+                        <tr>
+                            <td class="photo-col">
+                                <?php if (!empty($stu['profile_pic'])): ?>
+                                    <img src="<?= htmlspecialchars($stu['profile_pic']) ?>" 
+                                         alt="Student Photo" 
+                                         class="student-pic" 
+                                         onload="handleImageLoad(this)"
+                                         onerror="handleImageError(this)" />
+                                    <div class="no-image" style="display: none;">No Image</div>
+                                <?php else: ?>
+                                    <div class="no-image">No Image</div>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= htmlspecialchars($stu['name'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['father_name'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['roll_no'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['class'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['section'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['start_year'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['end_year'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['mobile'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['email'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['gender'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['dob'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['blood_group'] ?? '') ?></td>
+                            <td><?= htmlspecialchars($stu['adhaar_no'] ?? '') ?></td>
+                            <td><?= nl2br(htmlspecialchars($stu['address'] ?? '')) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         <?php endif; ?>
     <?php endif; ?>
 </main>

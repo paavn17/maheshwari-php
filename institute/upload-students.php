@@ -31,6 +31,11 @@ $admin_id       = $admin['id'];
 $uploadError = '';
 $uploadSuccess = '';
 
+// For reporting
+$insertedCount = 0;
+$notInsertedCount = 0;
+$notInsertedDetails = [];
+
 // Handle POST: receive student data and images base64 map
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
     $data = json_decode($_POST['final_data'], true);
@@ -48,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
         if (!$checkStmt || !$insertStmt) {
             die("Prepare failed: " . $conn->error);
         }
-        $errors = [];
+
         foreach ($data as $i => $row) {
             $name       = $row['name'];
             $fatherName = $row['father_name'] ?? '';
@@ -81,7 +86,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
             $checkStmt->execute();
             $res = $checkStmt->get_result()->fetch_assoc();
             if ($res['cnt'] > 0) {
-                $errors[] = "Row " . ($i+2) . " duplicate detected (roll_no/class/section exists)";
+                $notInsertedCount++;
+                $notInsertedDetails[] = [
+                    'roll_no' => $rollNo,
+                    'reason' => "Duplicate roll_no/class/section exists"
+                ];
                 continue;
             }
 
@@ -110,8 +119,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
             );
 
             if (!$insertStmt->execute()) {
-                $errors[] = "Row " . ($i+2) . " insert failed: " . $insertStmt->error;
+                $notInsertedCount++;
+                $notInsertedDetails[] = [
+                    'roll_no' => $rollNo,
+                    'reason' => "Insert failed: " . $insertStmt->error
+                ];
             } else {
+                $insertedCount++;
                 // Update studid to "stud" + id
                 $lastId = $insertStmt->insert_id;
                 $studid = "stud" . $lastId;
@@ -121,10 +135,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
             }
         }
 
-        if (!empty($errors)) {
-            $uploadError = implode("<br>", $errors);
-        } else {
-            $uploadSuccess = "All students inserted successfully.";
+        // Summary report
+        $uploadSuccess = "Students Inserted: $insertedCount. Students Not Inserted: $notInsertedCount.";
+        if (!empty($notInsertedDetails)) {
+            $uploadSuccess .= "<br><br>Details of Students Not Inserted:<br><table border='1' cellpadding='6' cellspacing='0' style='border-collapse: collapse; max-width: 900px; margin: 10px auto;'><tr><th>Roll No</th><th>Reason</th></tr>";
+            foreach ($notInsertedDetails as $detail) {
+                $uploadSuccess .= "<tr><td>" . htmlspecialchars($detail['roll_no']) . "</td><td>" . htmlspecialchars($detail['reason']) . "</td></tr>";
+            }
+            $uploadSuccess .= "</table>";
         }
     }
 }
@@ -214,16 +232,15 @@ table {
     margin: 0 auto 1rem auto;
     table-layout: fixed;
     overflow-x: auto;
-    display: block;             /* enables horizontal scrollbar */
-    white-space: nowrap;        /* prevent cell content wrapping */
+    display: block;
+    white-space: nowrap;
 }
-
 th, td {
     border: 1px solid #ccc;
-    padding: 12px 16px;         /* increased horizontal and vertical padding */
+    padding: 12px 16px;
     vertical-align: middle;
     word-wrap: break-word;
-    min-width: 140px;           /* ensures each cell has enough width */
+    min-width: 140px;
 }
 th {
     background:#f97316;
@@ -237,7 +254,6 @@ td input {
     background:transparent;
     font-size: 0.9rem;
 }
-
 .image-preview {
     width: 80px;
     height: 88px;
@@ -245,7 +261,6 @@ td input {
     border-radius: 6px;
     border: 1px solid #ddd;
 }
-
 #imageInput {
     display: block;
     margin-bottom: 20px;
@@ -272,6 +287,7 @@ td input {
 </aside>
 <main class="content">
     <h1 class="page-header">Upload Students Excel and Images</h1>
+
     <?php if($uploadError): ?><div class="error"><?= $uploadError ?></div><?php endif; ?>
     <?php if($uploadSuccess): ?><div class="success"><?= $uploadSuccess ?></div><?php endif; ?>
 
@@ -290,6 +306,7 @@ td input {
 
     <div id="previewDiv"></div>
 </main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const fileInput = document.getElementById('fileInput');
 const imageInput = document.getElementById('imageInput');
@@ -342,12 +359,10 @@ fileInput.addEventListener('change', function(){
             html += "<tr>";
 
             let roll = '';
-            // find roll_no index
             const rollIndex = header.indexOf('roll_no');
             if(rollIndex > -1){
                 roll = row[rollIndex] ? row[rollIndex].toString().toLowerCase() : '';
             }
-            // Image preview cell
             let imgSrc = imagesBase64Map[roll] || '';
             if(imgSrc){
                 html += `<td><img src="${imgSrc}" alt="Student Image" class="image-preview"></td>`;
@@ -367,7 +382,6 @@ fileInput.addEventListener('change', function(){
     reader.readAsBinaryString(file);
 });
 
-// When images are selected, map them by filename (basename without extension, lowercased)
 imageInput.addEventListener('change', async function(){
     imagesBase64Map = {};
     const files = Array.from(this.files);
@@ -382,7 +396,6 @@ imageInput.addEventListener('change', async function(){
         }
     }
 
-    // If preview already exists, regenerate with image previews updated
     if(previewData.length > 0){
         regeneratePreviewTable();
     }
@@ -415,17 +428,15 @@ function regeneratePreviewTable(){
 form.addEventListener('submit', function(e){
     e.preventDefault();
 
-    // Update previewData from editable inputs
     const tableInputs = previewDiv.querySelectorAll('td input');
     tableInputs.forEach(input=>{
         const col = input.dataset.col;
         const tr = input.closest('tr');
-        const idx = Array.from(tr.parentNode.children).indexOf(tr)-1; // minus header
+        const idx = Array.from(tr.parentNode.children).indexOf(tr)-1;
         if(previewData[idx]) previewData[idx][col] = input.value.trim();
     });
 
     finalDataInput.value = JSON.stringify(previewData);
-    // Send images base64 map to backend as JSON string
     imagesBase64Input.value = JSON.stringify(imagesBase64Map);
 
     form.submit();

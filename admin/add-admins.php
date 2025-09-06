@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
 
 include 'sidebar.php'; // Sidebar included for consistent sidebar and styles
 
-// Error and success messages
+// Initialize messages and variables
 $error = '';
 $success = '';
 $mode = 'existing'; // Default mode
@@ -32,7 +32,7 @@ try {
     $error = "Error loading institutions: " . htmlspecialchars($e->getMessage());
 }
 
-// Helper function for inserting admin
+// Helper function to insert admin
 function insertAdmin($conn, $institution_id, $name, $email, $phone, $password, $department, &$error) {
     $stmt = $conn->prepare("INSERT INTO institution_admins (institution_id, name, email, phone, password, department, created_at, approved_by) VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)");
     if (!$stmt) {
@@ -111,87 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($mode === 'new-excel') {
-        // Process Excel upload using simple CSV fallback if PhpSpreadsheet cannot be used
-        if (empty($_POST['name']) || empty($_POST['code']) || !isset($_FILES['excel_file'])) {
-            $error = "Institution name, code and Excel file are required.";
-        } elseif ($_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
-            $error = "Error uploading Excel file.";
-        } else {
-            $college_name = trim($_POST['name']);
-            $college_code = trim($_POST['code']);
-            $tmpName = $_FILES['excel_file']['tmp_name'];
-            $fileType = pathinfo($_FILES['excel_file']['name'], PATHINFO_EXTENSION);
-
-            // Support CSV as fallback for Excel upload if PhpSpreadsheet not available
-            if (in_array(strtolower($fileType), ['csv'])) {
-                $handle = fopen($tmpName, 'r');
-                if ($handle === false) {
-                    $error = "Failed to open uploaded file.";
-                } else {
-                    $header = fgetcsv($handle);
-                    if (!$header) {
-                        $error = "CSV file is empty.";
-                    } else {
-                        $headers = array_map('strtolower', array_map('trim', $header));
-                        $expectedHeaders = ['name', 'email', 'phone', 'password', 'department'];
-                        foreach ($expectedHeaders as $expect) {
-                            if (!in_array($expect, $headers)) {
-                                $error = "CSV missing required column: $expect.";
-                                break;
-                            }
-                        }
-                        if (!$error) {
-                            $colIndex = array_flip($headers);
-
-                            $conn->begin_transaction();
-                            try {
-                                // Insert institution
-                                $stmt = $conn->prepare("INSERT INTO institutions (name, code, created_at) VALUES (?, ?, NOW())");
-                                if (!$stmt) throw new Exception("Prepare failed: " . $conn->error);
-                                $stmt->bind_param("ss", $college_name, $college_code);
-                                $stmt->execute();
-                                $institution_id = $stmt->insert_id;
-                                $stmt->close();
-
-                                if (empty($institution_id) || !$institution_id) {
-                                    throw new Exception("Institution was not inserted or ID is missing!");
-                                }
-
-                                // Prepare for admin insert once
-                                $stmt = $conn->prepare("INSERT INTO institution_admins (institution_id, name, email, phone, password, department, created_at, approved_by) VALUES (?, ?, ?, ?, ?, ?, NOW(), 1)");
-                                if (!$stmt) throw new Exception("Prepare failed: " . $conn->error);
-
-                                while (($row = fgetcsv($handle)) !== false) {
-                                    $name = $row[$colIndex['name']] ?? '';
-                                    $email = $row[$colIndex['email']] ?? '';
-                                    $phone = $row[$colIndex['phone']] ?? '';
-                                    $password = $row[$colIndex['password']] ?? '';
-                                    $department = $row[$colIndex['department']] ?? '';
-
-                                    if (!$name || !$email || !$phone || !$password || !$department) {
-                                        continue; // skip incomplete row
-                                    }
-                                    $instId = (int)$institution_id;
-                                    $stmt->bind_param("isssss", $instId, $name, $email, $phone, $password, $department);
-                                    $stmt->execute();
-                                }
-                                $stmt->close();
-                                $conn->commit();
-                                $success = "Institution and admins added successfully from CSV.";
-                                $form = [];
-                            } catch (Exception $ex) {
-                                fclose($handle);
-                                $conn->rollback();
-                                $error = "Failed to add data from CSV: " . htmlspecialchars($ex->getMessage());
-                            }
-                            fclose($handle);
-                        }
-                    }
-                }
-            } else {
-                $error = "Unsupported file type. Please upload a CSV file.";
-            }
-        }
+        // Disable CSV/Excel upload for now
+        $error = "CSV/Excel upload is currently disabled. Please use other modes.";
     }
 }
 ?>
@@ -317,7 +238,7 @@ Add New Institution & Admin (Manual)
 
 <label>
 <input type="radio" name="mode" value="new-excel" <?= $mode === 'new-excel' ? 'checked' : '' ?> onchange="this.form.submit()" />
-Add New Institution & Admins (Excel/CSV Upload)
+Add New Institution & Admins (Excel/CSV Upload) (Disabled)
 </label>
 
 <?php if ($mode === 'existing'): ?>
@@ -348,9 +269,9 @@ Add New Institution & Admins (Excel/CSV Upload)
 <input type="text" name="admin_department" placeholder="Department" value="<?= htmlspecialchars($form['admin_department'] ?? '') ?>" required />
 
 <?php elseif ($mode === 'new-excel'): ?>
-<input type="text" name="name" placeholder="Institution Name" value="<?= htmlspecialchars($form['name'] ?? '') ?>" required />
-<input type="text" name="code" placeholder="Institution Code" value="<?= htmlspecialchars($form['code'] ?? '') ?>" required />
-<input type="file" name="excel_file" accept=".xls,.xlsx,.csv" required />
+<input type="text" name="name" placeholder="Institution Name" value="<?= htmlspecialchars($form['name'] ?? '') ?>" disabled />
+<input type="text" name="code" placeholder="Institution Code" value="<?= htmlspecialchars($form['code'] ?? '') ?>" disabled />
+<input type="file" name="excel_file" accept=".xls,.xlsx,.csv" disabled />
 
 <?php endif; ?>
 
