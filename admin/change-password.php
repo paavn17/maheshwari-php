@@ -32,7 +32,7 @@ $status_class = "";
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $current_password = $_POST['current_password'] ?? '';
-    $new_password = $_POST['new_password'] ?? '';
+    $new_password     = $_POST['new_password'] ?? '';
     $confirm_password = $_POST['confirm_password'] ?? '';
 
     if (!$current_password || !$new_password || !$confirm_password) {
@@ -42,14 +42,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = "❌ New password and confirm password do not match.";
         $status_class = "error";
     } else if ($current_password !== $admin['password']) {
-        // Plain text comparison
+        // Plain text comparison only
         $status = "❌ Current password is incorrect.";
         $status_class = "error";
     } else {
-        // Hash the new password for future security
-        $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+        // Store new password as plain text
         $update = $conn->prepare("UPDATE super_admins SET password=? WHERE id=?");
-        $update->bind_param("si", $hashed, $admin['id']);
+        $update->bind_param("si", $new_password, $admin['id']);
         if ($update->execute()) {
             $status = "✅ Password updated successfully.";
             $status_class = "success";

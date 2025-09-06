@@ -84,13 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['final_data'])) {
             }
 
             // Check duplicate in DB
-            $checkStmt->bind_param('isss', $institutionId, $rollNo, $class, $section);
-            $checkStmt->execute();
-            $res = $checkStmt->get_result()->fetch_assoc();
-            if ($res['cnt'] > 0) {
-                $errors[] = "Row " . ($i+2) . " duplicate detected (roll_no/class/section exists)";
-                continue;
-            }
+             $checkStmt->bind_param('isss', $institutionId, $rollNo, $class, $section);
+    $checkStmt->execute();
+    $res = $checkStmt->get_result()->fetch_assoc();
+    if ($res['cnt'] > 0) {
+        $errors[] = "Duplicate detected: roll no's '" . htmlspecialchars($rollNo) . "' already exists for class '" . htmlspecialchars($class) . "', section '" . htmlspecialchars($section) . "'";
+        continue;
+    }
 
             // Insert row
             $studid = ''; // temporary

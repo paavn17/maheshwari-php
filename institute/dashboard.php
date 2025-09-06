@@ -44,9 +44,11 @@ $admin = $result->fetch_assoc();
 if (!$admin) { die("Admin not found."); }
 
 $institution_id   = $admin['institution_id'];
-$department       = $admin['department']; // not used now
+$department       = $admin['department']; // used as class filter for students and shown on dashboard
 $current_card     = $admin['card_design'];
 $institution_logo = !empty($admin['logo']) ? 'data:image/jpeg;base64,' . base64_encode($admin['logo']) : '';
+
+$error = '';
 
 // ---- Fetch card designs ----
 $cardDesigns = [];
@@ -56,17 +58,21 @@ $cardStmt->execute();
 $cardResult = $cardStmt->get_result();
 while ($row = $cardResult->fetch_assoc()) {
     $row['front_url'] = !empty($row['front_img']) ? 'data:image/jpeg;base64,' . base64_encode($row['front_img']) : '';
-    $row['back_url']  = !empty($row['back_img'])  ? 'data:image/jpeg;base64,' . base64_encode($row['back_img'])  : '';
+    $row['back_url']  = !empty($row['back_img']) ? 'data:image/jpeg;base64,' . base64_encode($row['back_img']) : '';
     $cardDesigns[] = $row;
 }
 
-// ---- Fetch students ----
-$stmt = $conn->prepare("SELECT * FROM students WHERE institution_id=?");
-if (!$stmt) { die("Prepare failed (students fetch): " . $conn->error); }
-$stmt->bind_param('i', $institution_id);
-$stmt->execute();
-$students_result = $stmt->get_result();
-$students = $students_result->fetch_all(MYSQLI_ASSOC);
+// ---- Fetch students filtered by institution and class (admin's department) ----
+$stmt = $conn->prepare("SELECT * FROM students WHERE institution_id=? AND class=?");
+if (!$stmt) {
+    $students = [];
+    $error = "Failed to fetch students: " . htmlspecialchars($conn->error);
+} else {
+    $stmt->bind_param('is', $institution_id, $department);
+    $stmt->execute();
+    $students_result = $stmt->get_result();
+    $students = $students_result->fetch_all(MYSQLI_ASSOC);
+}
 
 // ---- Compute stats ----
 $totalStudents = count($students);
@@ -116,9 +122,6 @@ section.stats-section ul li { margin-bottom:4px;}
 section.stats-section ul li span { font-weight:700;}
 #card-design-form {margin-bottom:18px;}
 .save-btn {margin-top:16px;background:#c55f11;color:white;padding:8px 20px;font-weight:700;border-radius:8px;border:none; cursor:pointer;}
-#card-preview { display:flex; gap:16px; margin-top:16px;}
-#card-preview div { width:140px;height:88px;background:#f7f7f7;border-radius:8px; display:flex;align-items:center;justify-content:center;}
-#card-preview img { max-width:100%; max-height:84px; }
 </style>
 </head>
 <body>
@@ -138,64 +141,59 @@ section.stats-section ul li span { font-weight:700;}
       <select name="card_design" id="card_design_select" required>
         <option value="">-- Select Design --</option>
         <?php foreach ($cardDesigns as $d): ?>
-          <option value="<?= $d['id'] ?>"<?= ($current_card==$d['id']?' selected':'') ?>>
+          <option value="<?= $d['id'] ?>"<?= ($current_card == $d['id'] ? ' selected' : '') ?>>
             <?= htmlspecialchars($d['name']) ?>
           </option>
         <?php endforeach; ?>
       </select>
-      <div id="card-preview">
-        <div><img id="front-img-tag" src="" alt="Front Preview"></div>
-        <div><img id="back-img-tag" src="" alt="Back Preview"></div>
-      </div>
       <button type="submit" name="save_card_design" class="save-btn">Save</button>
     </form>
   </section>
 
   <div class="cards">
-    <div class="card" style="background:#f97316;"><div class="label">Total Students</div><div class="value"><?= $totalStudents ?></div></div>
-    <div class="card" style="background:#fb7185;"><div class="label">Missing Photos</div><div class="value"><?= $noImage ?></div></div>
-    <div class="card" style="background:#34d399;"><div class="label">Paid Students</div><div class="value"><?= $paid ?></div></div>
-    <div class="card" style="background:#facc15;"><div class="label">Unpaid Students</div><div class="value"><?= $unpaid ?></div></div>
-    <div class="card" style="background:#fb923c;"><div class="label">Branch</div><div class="value"><?= 'All' ?></div></div>
+    <div class="card" style="background:#f97316;">
+      <div class="label">Total Students</div>
+      <div class="value"><?= $totalStudents ?></div>
+    </div>
+    <div class="card" style="background:#fb7185;">
+      <div class="label">Missing Photos</div>
+      <div class="value"><?= $noImage ?></div>
+    </div>
+    <div class="card" style="background:#34d399;">
+      <div class="label">Paid Students</div>
+      <div class="value"><?= $paid ?></div>
+    </div>
+    <div class="card" style="background:#facc15;">
+      <div class="label">Unpaid Students</div>
+      <div class="value"><?= $unpaid ?></div>
+    </div>
+    <div class="card" style="background:#3b82f6;">
+      <div class="label">Department</div>
+      <div class="value"><?= htmlspecialchars($department ?: 'N/A') ?></div>
+    </div>
   </div>
 
   <section class="stats-section">
     <h3>Batch-wise Student Count</h3>
-    <?php if(empty($batchesMap)): ?>
+    <?php if (empty($batchesMap)): ?>
       <p style="color:#c55f11;">No batch data available.</p>
     <?php else: ?>
-      <ul><?php foreach($batchesMap as $b=>$c): ?><li><?= htmlspecialchars($b) ?>: <span><?= $c ?></span> student<?= $c!=1?'s':'' ?></li><?php endforeach; ?></ul>
+      <ul>
+        <?php foreach ($batchesMap as $b => $c): ?>
+          <li><?= htmlspecialchars($b) ?>: <span><?= $c ?></span> student<?= $c != 1 ? 's' : '' ?></li>
+        <?php endforeach; ?>
+      </ul>
     <?php endif; ?>
   </section>
 
   <section class="stats-section">
     <h3>Gender Distribution</h3>
-    <ul><?php foreach($genderCounts as $g=>$c): ?><li><?= htmlspecialchars($g) ?>: <span><?= $c ?></span></li><?php endforeach; ?></ul>
+    <ul>
+      <?php foreach ($genderCounts as $g => $c): ?>
+        <li><?= htmlspecialchars($g) ?>: <span><?= $c ?></span></li>
+      <?php endforeach; ?>
+    </ul>
   </section>
 </main>
-
-<script>
-const cardDesigns = <?= json_encode($cardDesigns, JSON_UNESCAPED_SLASHES) ?>;
-const selectBox = document.getElementById('card_design_select');
-const frontImg = document.getElementById('front-img-tag');
-const backImg  = document.getElementById('back-img-tag');
-
-function updatePreview() {
-  const selId = selectBox.value;
-  const selected = cardDesigns.find(c => c.id == selId);
-  if (selected) {
-    frontImg.src = selected.front_url;
-    backImg.src  = selected.back_url;
-    frontImg.style.display = selected.front_url ? "block" : "none";
-    backImg.style.display  = selected.back_url  ? "block" : "none";
-  } else {
-    frontImg.src = ""; backImg.src = "";
-    frontImg.style.display = backImg.style.display = "none";
-  }
-}
-
-selectBox.addEventListener('change', updatePreview);
-updatePreview();
-</script>
 </body>
 </html>

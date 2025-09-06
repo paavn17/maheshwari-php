@@ -20,7 +20,7 @@ if (!isset($_SESSION['email'])) {
 
 // Get admin info
 $admin_email = $_SESSION['email'];
-$stmt = $conn->prepare("SELECT id, institution_id, name FROM institution_admins WHERE email = ?");
+$stmt = $conn->prepare("SELECT id, institution_id, name, department FROM institution_admins WHERE email = ?");
 $stmt->bind_param("s", $admin_email);
 $stmt->execute();
 $admin = $stmt->get_result()->fetch_assoc();
@@ -28,6 +28,7 @@ if (!$admin) die("Admin not found.");
 
 $institution_id = $admin['institution_id'];
 $admin_name = $admin['name'];
+$department = $admin['department']; // Will use this to filter students by 'class'
 
 // Handle POST: save edited students
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['update_students'])) {
@@ -80,9 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['update_students'])) 
     exit;
 }
 
-// Fetch distinct batches (start_year + end_year)
-$stmt_batches = $conn->prepare("SELECT DISTINCT start_year, end_year FROM students WHERE institution_id=?");
-$stmt_batches->bind_param("i", $institution_id);
+// Fetch distinct batches (start_year + end_year) for the admin's institution and department (class)
+$stmt_batches = $conn->prepare("SELECT DISTINCT start_year, end_year FROM students WHERE institution_id=? AND class=? ORDER BY start_year ASC, end_year ASC");
+$stmt_batches->bind_param("is", $institution_id, $department);
 $stmt_batches->execute();
 $result_batches = $stmt_batches->get_result();
 
@@ -99,10 +100,10 @@ while ($row = $result_batches->fetch_assoc()) {
 // Selected batch
 $selected_batch = $_GET['batch'] ?? (isset($batches[0]) ? $batches[0]['start_year']."-".$batches[0]['end_year'] : null);
 
-// Fetch students filtered by batch
-$query = "SELECT * FROM students WHERE institution_id=?";
-$params = [$institution_id];
-$types = "i";
+// Fetch students filtered by batch, institution, and class (department)
+$query = "SELECT * FROM students WHERE institution_id=? AND class=?";
+$params = [$institution_id, $department];
+$types = "is";
 
 if (!empty($selected_batch)) {
     [$sel_start, $sel_end] = explode("-", $selected_batch);
@@ -179,7 +180,6 @@ function saveChanges() {
     .then(d => {
         if(d.success) {
             alert("Changes saved successfully!");
-
             // After save, exit edit mode
             editMode = false;
             updateToggleLabel();
