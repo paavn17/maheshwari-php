@@ -93,7 +93,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
     $menu_items = [
       ['title'=>'Dashboard', 'href'=>'dashboard.php'],
       ['title'=>'Upload Students Data', 'href'=>'upload-students.php'],
-      ['title'=>'Upload Employee Data', 'href'=>'upload-employees.php', 'locked'=>true],
+      // ['title'=>'Upload Employee Data', 'href'=>'upload-employees.php', 'locked'=>true],
+      ['title'=>'Manual Update Students Data', 'href'=>'manual-upload.php'],
       ['title'=>'Update Students Data', 'href'=>'update-students.php'],
       ['title'=>'Update Profile', 'href'=>'update-profile.php'],
       // ['title'=>'Payment', 'href'=>'payment.php', 'locked'=>true],

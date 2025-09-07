@@ -96,6 +96,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
       ['title'=>'Admin Details', 'href'=>'admin-details.php'],
       ['title'=>'Add Admins', 'href'=>'add-admins.php'],
       ['title'=>'Upload Students Data', 'href'=>'upload-students.php'],
+      ['title'=>'Manual Upload Students Data', 'href'=>'manual-upload.php'],
       // ['title'=>'Upload Employee Data', 'href'=>'upload-employees.php', 'locked'=>true], // locked
       ['title'=>'Card Master', 'href'=>'card-master.php'],
       ['title'=>'Card Designs', 'href'=>'card-designs.php'],
